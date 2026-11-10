@@ -49,6 +49,39 @@ type Props = {
   ref?: React.Ref<HTMLDivElement>;
 };
 
+interface PublicLink {
+  /** The share that provides the link, the document's own or a parent's. */
+  share: Share | null | undefined;
+  /** The public url of the document, empty when there is none. */
+  url: string;
+}
+
+/**
+ * Returns the public link of a document. A published document uses the link
+ * of a shared parent, even when it has no share of its own.
+ *
+ * @param document the document to share.
+ * @param share the document's own share, if any.
+ * @param sharedParent the share of a parent collection or document, if any.
+ * @returns the share that provides the link, and the link url.
+ */
+export function getPublicLink(
+  document: Document,
+  share: Share | null | undefined,
+  sharedParent: Share | null | undefined
+): PublicLink {
+  if (sharedParent && !document.isDraft) {
+    return {
+      share: sharedParent,
+      url: sharedParent.url
+        ? `${sharedParent.url}${document.path}`
+        : (share?.url ?? ""),
+    };
+  }
+
+  return { share, url: share?.url ?? "" };
+}
+
 function PublicAccess({ document, share, sharedParent, ref }: Props) {
   const { t } = useTranslation();
   const { shares } = useStores();
@@ -130,21 +163,24 @@ function PublicAccess({ document, share, sharedParent, ref }: Props) {
     [t, share]
   );
 
-  const linkShare = sharedParent && !document.isDraft ? sharedParent : share;
+  const { share: linkShare, url: shareUrl } = getPublicLink(
+    document,
+    share,
+    sharedParent
+  );
 
   const handleCopied = React.useCallback(() => {
     showPublicLinkCopiedToast(linkShare, t);
   }, [t, linkShare]);
 
-  const shareUrl =
-    sharedParent?.url && !document.isDraft
-      ? `${sharedParent.url}${document.path}`
-      : (share?.url ?? "");
-
   const copyButton = (
     <Tooltip content={t("Copy public link")}>
       <CopyToClipboard text={shareUrl} onCopy={handleCopied}>
-        <NudeButton type="button" disabled={!share} style={{ marginRight: 3 }}>
+        <NudeButton
+          type="button"
+          disabled={!shareUrl}
+          style={{ marginRight: 3 }}
+        >
           <CopyIcon color={theme.placeholder} size={18} />
         </NudeButton>
       </CopyToClipboard>
@@ -207,7 +243,7 @@ function PublicAccess({ document, share, sharedParent, ref }: Props) {
 
       <ResizingHeightContainer>
         {sharedParent?.published && !document.isDraft ? (
-          <ShareLinkInput type="text" disabled defaultValue={shareUrl}>
+          <ShareLinkInput type="text" readOnly defaultValue={shareUrl}>
             {copyButton}
           </ShareLinkInput>
         ) : share?.published ? (
